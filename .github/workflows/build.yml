@@ -31,6 +31,7 @@ jobs:
         REM === Hardcoded razzle environment (same vars razzle sets) ===
         set _BuildArch=x86
         set 386=1
+        set PATH=D:\NT\tools\x86;D:\NT\tools;%PATH%
         set PROCESSOR_ARCHITECTURE=x86
         set _NTDRIVE=D:
         set _NTBINDIR=D:\NT
@@ -44,6 +45,7 @@ jobs:
         set FREEBUILD=1
         set NTDEBUG=ntsd
         set 386=1
+        set PATH=D:\NT\tools\x86;D:\NT\tools;%PATH%
         
         echo === Building base/ntos (minimal 9-module kernel) ===
         echo dirs:
