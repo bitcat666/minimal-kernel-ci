@@ -29,7 +29,6 @@ jobs:
         set PATH=D:\minimal_XP\tools\x86;%PATH%
         set INCLUDE=D:\minimal_XP\public\sdk\inc;D:\minimal_XP\public\sdk\inc\crt;D:\minimal_XP\public\internal\windows\inc;D:\minimal_XP\base\ntos\inc;D:\minimal_XP\public\halkit\inc
         set CFLAGS=/c /O1 /GX -D_X86_=1 -Di386=1 -DSTD_CALL -DNT_UP=1 -DWIN32 -D_WIN32 -DWINNT=1 -DNT -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0501 -DWINVER=0x0501
-        
         for /d %%m in (ke mm io ob ps ex init rtl lpc) do (
             echo --- %%m ---
             if not exist base\ntos\%%m\i386 mkdir base\ntos\%%m\i386
@@ -39,36 +38,31 @@ jobs:
         )
         echo COMPILE DONE
 
-    - name: Link ntoskrnl.exe
+    - name: Build link.rsp
       shell: pwsh
       working-directory: D:\minimal_XP
       run: |
-        $env:PATH = "D:\minimal_XP\tools\x86;" + $env:PATH
-        
-        Write-Host "=== Collecting i386 .obj ONLY ==="
         $objs = Get-ChildItem -Recurse base\ntos\*.obj, base\hals\*.obj | Where-Object { $_.FullName -match '\\i386\\' }
-        $objs | ForEach-Object { $_.FullName } | Out-File -Encoding ascii link.rsp
-        
-        Write-Host "Objects: $($objs.Count)"
-        
-        Write-Host "=== Adding SDK libs ==="
-        Get-ChildItem public\sdk\lib\i386\*.lib | ForEach-Object { $_.FullName } | Out-File -Encoding ascii -Append link.rsp
-        
-        Write-Host "=== Linking ==="
-        $result = & D:\minimal_XP\tools\x86\link.exe /SUBSYSTEM:NATIVE /DRIVER /MACHINE:IX86 /BASE:0x00400000 /ENTRY:KiSystemStartup@4 /OUT:ntoskrnl.exe @link.rsp 2>&1
-        $errors = $result | Select-String "error|unresolved"
-        $errors | ForEach-Object { $_.Line }
-        
-        if (Test-Path ntoskrnl.exe) {
-            Write-Host "============================================================"
-            Write-Host " LINK SUCCESS! "
-            Write-Host "============================================================"
-            Get-Item ntoskrnl.exe | Format-List
-        } else {
-            Write-Host "============================================================"
-            Write-Host " LINK FAILED — $($errors.Count) errors"
-            Write-Host "============================================================"
-        }
+        $libs = Get-ChildItem public\sdk\lib\i386\*.lib
+        $all = @($objs) + @($libs)
+        $all | ForEach-Object { $_.FullName } | Out-File -Encoding ascii link.rsp
+        Write-Host "Objects: $($objs.Count), Libs: $($libs.Count)"
+
+    - name: Link ntoskrnl.exe
+      shell: cmd
+      working-directory: D:\minimal_XP
+      run: |
+        set PATH=D:\minimal_XP\tools\x86;%PATH%
+        echo === Linking ===
+        link.exe /SUBSYSTEM:NATIVE /DRIVER /MACHINE:IX86 /BASE:0x00400000 /ENTRY:KiSystemStartup@4 /OUT:ntoskrnl.exe @link.rsp 2>&1 | findstr /C:"error" /C:"fatal" /C:"unresolved" /C:"LINK :"
+        if exist ntoskrnl.exe (
+            echo ============================================================
+            echo  LINK SUCCESS!
+            echo ============================================================
+            dir ntoskrnl.exe
+        ) else (
+            echo LINK FAILED
+        )
 
     - name: Upload kernel
       if: always()
