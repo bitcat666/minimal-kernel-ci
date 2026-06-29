@@ -40,37 +40,35 @@ jobs:
         echo COMPILE DONE
 
     - name: Link ntoskrnl.exe
-      shell: cmd
+      shell: pwsh
       working-directory: D:\minimal_XP
       run: |
-        set PATH=D:\minimal_XP\tools\x86;%PATH%
-        echo === Collecting i386 .obj ONLY (skip ia64/amd64/alpha) ===
-        del link.rsp 2>nul
-        for /r base\ntos %%f in (*.obj) do (
-            echo %%f | findstr /C:"\i386\" >nul && echo %%f >> link.rsp
-        )
-        for /r base\hals %%f in (*.obj) do (
-            echo %%f | findstr /C:"\i386\" >nul && echo %%f >> link.rsp
-        )
-        echo Objects: 
-        find /c ".obj" link.rsp
+        $env:PATH = "D:\minimal_XP\tools\x86;" + $env:PATH
         
-        echo === SDK libs ===
-        for %%f in (public\sdk\lib\i386\*.lib) do echo %%f >> link.rsp
+        Write-Host "=== Collecting i386 .obj ONLY ==="
+        $objs = Get-ChildItem -Recurse base\ntos\*.obj, base\hals\*.obj | Where-Object { $_.FullName -match '\\i386\\' }
+        $objs | ForEach-Object { $_.FullName } | Out-File -Encoding ascii link.rsp
         
-        echo === Linking ===
-        link.exe /SUBSYSTEM:NATIVE /DRIVER /MACHINE:IX86 /BASE:0x00400000 /ENTRY:KiSystemStartup@4 /OUT:ntoskrnl.exe @link.rsp 2>&1 | findstr /C:"error" /C:"fatal" /C:"unresolved" /C:"LINK :" | findstr /V "Copyright"
+        Write-Host "Objects: $($objs.Count)"
         
-        if exist ntoskrnl.exe (
-            echo ============================================================
-            echo  LINK SUCCESS! 
-            echo ============================================================
-            dir ntoskrnl.exe
-        ) else (
-            echo ============================================================
-            echo  LINK FAILED
-            echo ============================================================
-        )
+        Write-Host "=== Adding SDK libs ==="
+        Get-ChildItem public\sdk\lib\i386\*.lib | ForEach-Object { $_.FullName } | Out-File -Encoding ascii -Append link.rsp
+        
+        Write-Host "=== Linking ==="
+        $result = & D:\minimal_XP\tools\x86\link.exe /SUBSYSTEM:NATIVE /DRIVER /MACHINE:IX86 /BASE:0x00400000 /ENTRY:KiSystemStartup@4 /OUT:ntoskrnl.exe @link.rsp 2>&1
+        $errors = $result | Select-String "error|unresolved"
+        $errors | ForEach-Object { $_.Line }
+        
+        if (Test-Path ntoskrnl.exe) {
+            Write-Host "============================================================"
+            Write-Host " LINK SUCCESS! "
+            Write-Host "============================================================"
+            Get-Item ntoskrnl.exe | Format-List
+        } else {
+            Write-Host "============================================================"
+            Write-Host " LINK FAILED — $($errors.Count) errors"
+            Write-Host "============================================================"
+        }
 
     - name: Upload kernel
       if: always()
