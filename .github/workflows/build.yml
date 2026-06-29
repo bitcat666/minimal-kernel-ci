@@ -54,6 +54,11 @@ jobs:
             set "fp=!fp:\wow6432\=\XX\!"
             set "fp=!fp:\paemp\=\XX\!"
             set "fp=!fp:\pae\=\XX\!"
+            set "fp=!fp:\ia64\=\XX\!"
+            set "fp=!fp:\amd64\=\XX\!"
+            set "fp=!fp:\alpha\=\XX\!"
+            set "fp=!fp:\axp64\=\XX\!"
+            set "fp=!fp:\arm\=\XX\!"
             if "!fp!"=="%%f" (echo %%f>> link.rsp)
         )
         echo Objects: 
