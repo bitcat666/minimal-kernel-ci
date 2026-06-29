@@ -1,13 +1,10 @@
 name: Build Minimal XP Kernel
 
-on:
-  push:
-  workflow_dispatch:
+on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: windows-latest
-    
     steps:
     - uses: actions/checkout@v4
     
@@ -22,60 +19,61 @@ jobs:
         Invoke-WebRequest -Uri $asset.browser_download_url -Headers $headers -OutFile "minimal_XP.7z"
         7z x minimal_XP.7z -oD:\ -y
 
-    - name: Compile kernel
+    - name: Compile
       shell: cmd
       working-directory: D:\minimal_XP
       run: |
         set PATH=D:\minimal_XP\tools\x86;%PATH%
-        set INCLUDE=D:\minimal_XP\public\sdk\inc;D:\minimal_XP\public\sdk\inc\crt;D:\minimal_XP\public\internal\windows\inc;D:\minimal_XP\base\ntos\inc;D:\minimal_XP\public\halkit\inc
+        set INCLUDE=D:\minimal_XP\public\sdk\inc;D:\minimal_XP\public\sdk\inc\crt;D:\minimal_XP\public\internal\windows\inc;D:\minimal_XP\public\internal\base\inc;D:\minimal_XP\base\ntos\inc;D:\minimal_XP\public\halkit\inc;D:\minimal_XP\base\hals\inc;D:\minimal_XP\base\hals\halx86\i386
         set CFLAGS=/c /O1 /GX -D_X86_=1 -Di386=1 -DSTD_CALL -DNT_UP=1 -DWIN32 -D_WIN32 -DWINNT=1 -DNT -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0501 -DWINVER=0x0501 -D_NTOS_KSEC_ -DCONDITION_HANDLING=1 -DNT_INST=0
         for /d %%m in (ke mm io ob ps ex init rtl lpc) do (
             echo --- %%m ---
             if not exist base\ntos\%%m\i386 mkdir base\ntos\%%m\i386
             for %%f in (base\ntos\%%m\*.c base\ntos\%%m\*.cpp base\ntos\%%m\i386\*.c base\ntos\%%m\i386\*.asm) do (
-                if exist %%f cl.exe %CFLAGS% /Fobase\ntos\%%m\i386\%%~nf.obj %%f >nul 2>&1
+                if exist %%f cl.exe !CFLAGS! /Fobase\ntos\%%m\i386\%%~nf.obj %%f 2>&1 | findstr /C:"error C" /C:"fatal error"
             )
         )
         echo COMPILE DONE
 
-    - name: Link ntoskrnl (UP only, no mp)
+    - name: Link
       shell: cmd
       working-directory: D:\minimal_XP
       run: |
         setlocal enabledelayedexpansion
         set PATH=D:\minimal_XP\tools\x86;%PATH%
         
-        echo === Collecting UP/i386 only ===
-        del link.rsp 2>nul
-        for /r base\ntos %%f in (*.obj) do (
-            set "fp=%%f"
-            set "fp=!fp:\mp\=\XX\!"
-            set "fp=!fp:\user\=\XX\!"
-            set "fp=!fp:\wow6432\=\XX\!"
-            set "fp=!fp:\paemp\=\XX\!"
-            set "fp=!fp:\pae\=\XX\!"
-            set "fp=!fp:\ia64\=\XX\!"
-            set "fp=!fp:\amd64\=\XX\!"
-            set "fp=!fp:\alpha\=\XX\!"
-            set "fp=!fp:\axp64\=\XX\!"
-            set "fp=!fp:\arm\=\XX\!"
-            if "!fp!"=="%%f" (echo %%f>> link.rsp)
+        echo === Building link.rsp (ONLY our CI output) ===
+        type nul > link.rsp
+        for /d %%m in (ke mm io ob ps ex init rtl lpc) do (
+            if exist base\ntos\%%m\i386\*.obj (
+                for %%f in (base\ntos\%%m\i386\*.obj) do (
+                    set "fp=%%f"
+                    echo !fp!>> link.rsp
+                )
+            )
         )
-        echo Objects: 
-        find /c ".obj" link.rsp 2>nul || echo 0
+        echo CI objs: 
+        find /c ".obj" link.rsp
         
-        echo === SDK libs ===
+        echo === Adding SDK libs ===
         for %%f in (public\sdk\lib\i386\*.lib) do echo %%f>> link.rsp
         
         echo === Linking ===
-        link.exe /SUBSYSTEM:NATIVE /DRIVER /MACHINE:IX86 /BASE:0x00400000 /ENTRY:KiSystemStartup@4 /OUT:ntoskrnl.exe @link.rsp 2>&1 | findstr /C:"error" /C:"fatal" /C:"unresolved" /C:"Creating"
-        if exist ntoskrnl.exe (echo LINK SUCCESS! && dir ntoskrnl.exe) else (echo LINK FAILED)
+        link.exe /SUBSYSTEM:NATIVE /DRIVER /MACHINE:IX86 /BASE:0x00400000 /OUT:ntoskrnl.exe @link.rsp 2>&1 | findstr /C:"error LNK" /C:"fatal" /C:"unresolved" /C:"Creating"
+        if exist ntoskrnl.exe (echo LINK SUCCESS && dir ntoskrnl.exe) else (echo LINK FAILED)
 
-    - name: Upload
+    - uses: actions/upload-artifact@v4
       if: always()
-      uses: actions/upload-artifact@v4
       with:
         name: ntoskrnl
         path: |
           D:\minimal_XP\ntoskrnl.exe
-          D:\minimal_XP\base\ntos\**\i386\*.obj
+          D:\minimal_XP\base\ntos\ke\i386\*.obj
+          D:\minimal_XP\base\ntos\mm\i386\*.obj
+          D:\minimal_XP\base\ntos\io\i386\*.obj
+          D:\minimal_XP\base\ntos\ob\i386\*.obj
+          D:\minimal_XP\base\ntos\ps\i386\*.obj
+          D:\minimal_XP\base\ntos\ex\i386\*.obj
+          D:\minimal_XP\base\ntos\init\i386\*.obj
+          D:\minimal_XP\base\ntos\rtl\i386\*.obj
+          D:\minimal_XP\base\ntos\lpc\i386\*.obj
