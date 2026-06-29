@@ -34,7 +34,7 @@ jobs:
             echo --- %%m ---
             if not exist base\ntos\%%m\i386 mkdir base\ntos\%%m\i386
             for %%f in (base\ntos\%%m\*.c base\ntos\%%m\*.cpp base\ntos\%%m\i386\*.c base\ntos\%%m\i386\*.asm) do (
-                if exist %%f cl.exe %CFLAGS% /Fobase\ntos\%%m\i386\%%~nf.obj %%f 2>&1 | findstr /V "Copyright Microsoft" >nul
+                if exist %%f cl.exe %CFLAGS% /Fobase\ntos\%%m\i386\%%~nf.obj %%f >nul 2>&1
             )
         )
         echo COMPILE DONE
@@ -44,22 +44,32 @@ jobs:
       working-directory: D:\minimal_XP
       run: |
         set PATH=D:\minimal_XP\tools\x86;%PATH%
-        echo === Collecting all .obj files ===
+        echo === Collecting i386 .obj ONLY (skip ia64/amd64/alpha) ===
         del link.rsp 2>nul
-        for /r base\ntos %%f in (*.obj) do echo %%f >> link.rsp
-        for /r base\hals %%f in (*.obj) do echo %%f >> link.rsp
+        for /r base\ntos %%f in (*.obj) do (
+            echo %%f | findstr /C:"\i386\" >nul && echo %%f >> link.rsp
+        )
+        for /r base\hals %%f in (*.obj) do (
+            echo %%f | findstr /C:"\i386\" >nul && echo %%f >> link.rsp
+        )
+        echo Objects: 
+        find /c ".obj" link.rsp
         
-        echo === Adding SDK libs ===
+        echo === SDK libs ===
         for %%f in (public\sdk\lib\i386\*.lib) do echo %%f >> link.rsp
         
-        echo === Linking ntoskrnl.exe ===
-        link.exe /SUBSYSTEM:NATIVE /DRIVER /MACHINE:IX86 /BASE:0x00400000 /ENTRY:KiSystemStartup@4 /OUT:ntoskrnl.exe @link.rsp 2>&1 | findstr /C:"error" /C:"fatal" /C:"Creating" /C:"unresolved"
+        echo === Linking ===
+        link.exe /SUBSYSTEM:NATIVE /DRIVER /MACHINE:IX86 /BASE:0x00400000 /ENTRY:KiSystemStartup@4 /OUT:ntoskrnl.exe @link.rsp 2>&1 | findstr /C:"error" /C:"fatal" /C:"unresolved" /C:"LINK :" | findstr /V "Copyright"
+        
         if exist ntoskrnl.exe (
-            echo LINK SUCCESS
+            echo ============================================================
+            echo  LINK SUCCESS! 
+            echo ============================================================
             dir ntoskrnl.exe
         ) else (
-            echo LINK FAILED - checking unresolved
-            link.exe /SUBSYSTEM:NATIVE /DRIVER /MACHINE:IX86 /BASE:0x00400000 /ENTRY:KiSystemStartup@4 /OUT:ntoskrnl.exe @link.rsp 2>&1 | findstr /C:"unresolved" | head -20
+            echo ============================================================
+            echo  LINK FAILED
+            echo ============================================================
         )
 
     - name: Upload kernel
@@ -69,4 +79,4 @@ jobs:
         name: ntoskrnl
         path: |
           D:\minimal_XP\ntoskrnl.exe
-          D:\minimal_XP\base\ntos\**\*.obj
+          D:\minimal_XP\base\ntos\**\i386\*.obj
