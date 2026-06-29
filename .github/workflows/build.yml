@@ -1,4 +1,4 @@
-name: Build Minimal XP Kernel
+name: Build Minimal XP Kernel via razzle
 
 on: [push, workflow_dispatch]
 
@@ -18,63 +18,31 @@ jobs:
         $asset = $release.assets | Where-Object { $_.name -like "minimal_XP*" }
         Invoke-WebRequest -Uri $asset.browser_download_url -Headers $headers -OutFile "minimal_XP.7z"
         7z x minimal_XP.7z -oD:\ -y
+        
+        # Need full NT source for public/ and tools/. Map minimal_XP -> NT
+        echo === Mapping minimal_XP as NT ===
+        mklink /D D:\NT D:\minimal_XP 2>nul
+        dir D:\NT\base\ntos\ke 2>nul
 
-    - name: Compile
+    - name: Build kernel with razzle
       shell: cmd
-      working-directory: D:\minimal_XP
+      working-directory: D:\NT
       run: |
-        set PATH=D:\minimal_XP\tools\x86;%PATH%
-        set INCLUDE=D:\minimal_XP\public\sdk\inc;D:\minimal_XP\public\sdk\inc\crt;D:\minimal_XP\public\internal\windows\inc;D:\minimal_XP\public\internal\base\inc;D:\minimal_XP\base\ntos\inc;D:\minimal_XP\public\halkit\inc;D:\minimal_XP\base\hals\inc;D:\minimal_XP\base\hals\halx86\i386
-        setlocal enabledelayedexpansion
-        set CFLAGS=/c /O1 /GX -D_X86_=1 -Di386=1 -DSTD_CALL -DNT_UP=1 -DWIN32 -D_WIN32 -DWINNT=1 -DNT -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0501 -DWINVER=0x0501 -D_NTOS_KSEC_ -DCONDITION_HANDLING=1 -DNT_INST=0
-        for /d %%m in (ke mm io ob ps ex init rtl lpc) do (
-            echo --- %%m ---
-            if not exist base\ntos\%%m\i386 mkdir base\ntos\%%m\i386
-            for %%f in (base\ntos\%%m\*.c base\ntos\%%m\*.cpp base\ntos\%%m\i386\*.c base\ntos\%%m\i386\*.asm) do (
-                if exist %%f cl.exe %CFLAGS% /Fobase\ntos\%%m\i386\%%~nf.obj %%f 2>&1 | findstr /C:"error C" /C:"fatal error"
-            )
-        )
-        echo COMPILE DONE
-
-    - name: Link
-      shell: cmd
-      working-directory: D:\minimal_XP
-      run: |
-        setlocal enabledelayedexpansion
-        set PATH=D:\minimal_XP\tools\x86;%PATH%
+        echo === Starting razzle.cmd ===
+        call tools\razzle.cmd free offline
+        if errorlevel 1 (echo RAZZLE FAILED && exit /b 1)
+        echo RAZZLE OK
         
-        echo === Building link.rsp (ONLY our CI output) ===
-        type nul > link.rsp
-        for /d %%m in (ke mm io ob ps ex init rtl lpc) do (
-            if exist base\ntos\%%m\i386\*.obj (
-                for %%f in (base\ntos\%%m\i386\*.obj) do (
-                    set "fp=%%f"
-                    echo !fp!>> link.rsp
-                )
-            )
-        )
-        echo CI objs: 
-        find /c ".obj" link.rsp
+        echo === Building base/ntos (minimal kernel) ===
+        cd base\ntos
+        build /cZP
+        echo BUILD EXIT: %ERRORLEVEL%
         
-        echo === Adding SDK libs ===
-        for %%f in (public\sdk\lib\i386\*.lib) do echo %%f>> link.rsp
-        
-        echo === Linking ===
-        link.exe /SUBSYSTEM:NATIVE /DRIVER /MACHINE:IX86 /BASE:0x00400000 /OUT:ntoskrnl.exe @link.rsp 2>&1 | findstr /C:"error LNK" /C:"fatal" /C:"unresolved" /C:"Creating"
-        if exist ntoskrnl.exe (echo LINK SUCCESS && dir ntoskrnl.exe) else (echo LINK FAILED)
+        if errorlevel 1 (echo BUILD HAD ERRORS — checking for ntoskrnl) else (echo BUILD SUCCESS)
+        dir /s ntoskrnl.exe 2>nul || dir /s *.exe 2>nul
 
     - uses: actions/upload-artifact@v4
       if: always()
       with:
         name: ntoskrnl
-        path: |
-          D:\minimal_XP\ntoskrnl.exe
-          D:\minimal_XP\base\ntos\ke\i386\*.obj
-          D:\minimal_XP\base\ntos\mm\i386\*.obj
-          D:\minimal_XP\base\ntos\io\i386\*.obj
-          D:\minimal_XP\base\ntos\ob\i386\*.obj
-          D:\minimal_XP\base\ntos\ps\i386\*.obj
-          D:\minimal_XP\base\ntos\ex\i386\*.obj
-          D:\minimal_XP\base\ntos\init\i386\*.obj
-          D:\minimal_XP\base\ntos\rtl\i386\*.obj
-          D:\minimal_XP\base\ntos\lpc\i386\*.obj
+        path: D:\NT\base\ntos\**\ntoskrnl.exe
