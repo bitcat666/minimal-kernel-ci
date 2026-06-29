@@ -21,7 +21,7 @@ jobs:
         
         # Need full NT source for public/ and tools/. Map minimal_XP -> NT
         echo === Mapping minimal_XP as NT ===
-        mklink /D D:\NT D:\minimal_XP 2>nul
+        cmd /c "mklink /D D:\NT D:\minimal_XP" 2>nul
         dir D:\NT\base\ntos\ke 2>nul
 
     - name: Build kernel with razzle
