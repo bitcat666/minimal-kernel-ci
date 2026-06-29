@@ -1,0 +1,46 @@
+name: Build Minimal XP Kernel
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download source
+      shell: pwsh
+      run: |
+        $repo = "${{ github.repository }}"
+        $token = "${{ secrets.GITHUB_TOKEN }}"
+        $headers = @{ Authorization = "Bearer $token" }
+        $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/latest" -Headers $headers
+        $asset = $release.assets | Where-Object { $_.name -like "minimal_XP*" }
+        if ($asset) {
+            Invoke-WebRequest -Uri $asset.browser_download_url -Headers $headers -OutFile "minimal_XP.7z"
+            7z x minimal_XP.7z -oD:\ -y
+        } else {
+            Write-Host "ERROR: No release found"
+            exit 1
+        }
+
+    - name: Build minimal kernel
+      shell: cmd
+      run: |
+        D:
+        cd D:\minimal_XP
+        set PATH=D:\minimal_XP\tools\x86;%PATH%
+        echo === dirs ===
+        type base\ntos\dirs
+        echo === Building ntoskrnl ===
+        REM This needs razzle env — using direct nmake for now
+        echo Build placeholder - needs Windows XP build system
+
+    - name: Upload kernel
+      uses: actions/upload-artifact@v4
+      with:
+        name: ntoskrnl-minimal
+        path: D:\minimal_XP\base\ntos\**\ntoskrnl.exe
