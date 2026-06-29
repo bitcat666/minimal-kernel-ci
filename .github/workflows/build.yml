@@ -20,6 +20,7 @@ jobs:
         $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/latest" -Headers $headers
         $asset = $release.assets | Where-Object { $_.name -like "minimal_XP*" }
         if ($asset) {
+            Write-Host "Downloading $($asset.name) ($([math]::Round($asset.size/1MB)) MB)..."
             Invoke-WebRequest -Uri $asset.browser_download_url -Headers $headers -OutFile "minimal_XP.7z"
             7z x minimal_XP.7z -oD:\ -y
         } else {
@@ -27,20 +28,57 @@ jobs:
             exit 1
         }
 
-    - name: Build minimal kernel
+    - name: Build kernel (compile .cpp files)
       shell: cmd
+      working-directory: D:\minimal_XP
       run: |
-        D:
-        cd D:\minimal_XP
         set PATH=D:\minimal_XP\tools\x86;%PATH%
-        echo === dirs ===
-        type base\ntos\dirs
-        echo === Building ntoskrnl ===
-        REM This needs razzle env — using direct nmake for now
-        echo Build placeholder - needs Windows XP build system
+        set INCLUDE=D:\minimal_XP\public\sdk\inc;D:\minimal_XP\public\sdk\inc\crt;D:\minimal_XP\public\internal\windows\inc;D:\minimal_XP\base\ntos\inc;D:\minimal_XP\public\halkit\inc
+        set LIB=D:\minimal_XP\public\sdk\lib\i386
+        
+        echo ============================================================
+        echo  Building Minimal NT Kernel (9 modules)
+        echo ============================================================
+        echo.
+        
+        set CFLAGS=/c /O1 /GX /MT /W3 -D_X86_=1 -Di386=1 -DSTD_CALL -DNT_UP=1 -DWIN32 -D_WIN32 -DWINNT=1 -DNT -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0501 -DWINVER=0x0501 -DNT_MINI_KERNEL
+        
+        set FAILED=0
+        set TOTAL=0
+        
+        for /d %%m in (ke mm io ob ps ex init rtl lpc) do (
+            echo --- %%m ---
+            if not exist base\ntos\%%m\i386 mkdir base\ntos\%%m\i386
+            for %%f in (base\ntos\%%m\*.c base\ntos\%%m\*.cpp) do (
+                set /a TOTAL+=1
+                cl.exe %CFLAGS% /Fobase\ntos\%%m\i386\%%~nf.obj %%f 2>&1 | findstr /C:"error" >nul && set /a FAILED+=1
+            )
+        )
+        
+        echo.
+        echo ============================================================
+        echo  TOTAL: %TOTAL% files, FAILED: %FAILED%
+        echo ============================================================
 
-    - name: Upload kernel
+    - name: Show results
+      if: always()
+      shell: cmd
+      working-directory: D:\minimal_XP
+      run: |
+        echo === Compiled objects ===
+        dir /s *.obj 2>nul
+        echo.
+        echo === Size summary ===
+        for /d %%m in (ke mm io ob ps ex init rtl lpc) do (
+            if exist base\ntos\%%m\i386\*.obj (
+                echo %%m: 
+                dir base\ntos\%%m\i386\*.obj 2>nul | find "File(s)"
+            )
+        )
+
+    - name: Upload objects
+      if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: ntoskrnl-minimal
-        path: D:\minimal_XP\base\ntos\**\ntoskrnl.exe
+        name: kernel-obj
+        path: D:\minimal_XP\base\ntos\**\*.obj
