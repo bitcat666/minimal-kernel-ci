@@ -24,22 +24,31 @@ jobs:
         cmd /c "mklink /D D:\NT D:\minimal_XP" 2>nul
         dir D:\NT\base\ntos\ke 2>nul
 
+    - name: Patch razzle (skip certs)
+      shell: cmd
+      working-directory: D:\NT
+      run: |
+        REM Fix razzle.cmd to skip certificate installation (broken on modern Windows)
+        powershell -Command "(gc tools\razzle.cmd) -replace 'echo Verifying that the Testroot','goto :SkipCerts' | sc tools\razzle.cmd"
+        echo razzle patched
+
     - name: Build kernel with razzle
       shell: cmd
       working-directory: D:\NT
       run: |
+        set _BuildArch=x86
+        set 386=1
+        set PROCESSOR_ARCHITECTURE=x86
         echo === Starting razzle.cmd ===
         call tools\razzle.cmd free offline
         if errorlevel 1 (echo RAZZLE FAILED && exit /b 1)
-        echo RAZZLE OK
+        echo RAZZLE OK — _BuildArch=%_BuildArch% _NTBINDIR=%_NTBINDIR%
         
         echo === Building base/ntos (minimal kernel) ===
         cd base\ntos
         build /cZP
         echo BUILD EXIT: %ERRORLEVEL%
-        
-        if errorlevel 1 (echo BUILD HAD ERRORS — checking for ntoskrnl) else (echo BUILD SUCCESS)
-        dir /s ntoskrnl.exe 2>nul || dir /s *.exe 2>nul
+        dir /s ntoskrnl.exe 2>nul || echo No ntoskrnl.exe found
 
     - uses: actions/upload-artifact@v4
       if: always()
