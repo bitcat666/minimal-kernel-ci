@@ -25,12 +25,13 @@ jobs:
       run: |
         set PATH=D:\minimal_XP\tools\x86;%PATH%
         set INCLUDE=D:\minimal_XP\public\sdk\inc;D:\minimal_XP\public\sdk\inc\crt;D:\minimal_XP\public\internal\windows\inc;D:\minimal_XP\public\internal\base\inc;D:\minimal_XP\base\ntos\inc;D:\minimal_XP\public\halkit\inc;D:\minimal_XP\base\hals\inc;D:\minimal_XP\base\hals\halx86\i386
+        setlocal enabledelayedexpansion
         set CFLAGS=/c /O1 /GX -D_X86_=1 -Di386=1 -DSTD_CALL -DNT_UP=1 -DWIN32 -D_WIN32 -DWINNT=1 -DNT -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0501 -DWINVER=0x0501 -D_NTOS_KSEC_ -DCONDITION_HANDLING=1 -DNT_INST=0
         for /d %%m in (ke mm io ob ps ex init rtl lpc) do (
             echo --- %%m ---
             if not exist base\ntos\%%m\i386 mkdir base\ntos\%%m\i386
             for %%f in (base\ntos\%%m\*.c base\ntos\%%m\*.cpp base\ntos\%%m\i386\*.c base\ntos\%%m\i386\*.asm) do (
-                if exist %%f cl.exe !CFLAGS! /Fobase\ntos\%%m\i386\%%~nf.obj %%f 2>&1 | findstr /C:"error C" /C:"fatal error"
+                if exist %%f cl.exe %CFLAGS% /Fobase\ntos\%%m\i386\%%~nf.obj %%f 2>&1 | findstr /C:"error C" /C:"fatal error"
             )
         )
         echo COMPILE DONE
