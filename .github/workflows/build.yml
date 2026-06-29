@@ -24,27 +24,31 @@ jobs:
         cmd /c "mklink /D D:\NT D:\minimal_XP" 2>nul
         dir D:\NT\base\ntos\ke 2>nul
 
-    - name: Patch razzle (skip certs)
+    - name: Build kernel (hardcoded env, no razzle)
       shell: cmd
       working-directory: D:\NT
       run: |
-        REM Fix razzle.cmd to skip certificate installation (broken on modern Windows)
-        powershell -Command "(gc tools\razzle.cmd) -replace 'echo Verifying that the Testroot','goto :SkipCerts' | sc tools\razzle.cmd"
-        echo razzle patched
-
-    - name: Build kernel with razzle
-      shell: cmd
-      working-directory: D:\NT
-      run: |
+        REM === Hardcoded razzle environment (same vars razzle sets) ===
         set _BuildArch=x86
         set 386=1
         set PROCESSOR_ARCHITECTURE=x86
-        echo === Starting razzle.cmd ===
-        call tools\razzle.cmd free offline
-        if errorlevel 1 (echo RAZZLE FAILED && exit /b 1)
-        echo RAZZLE OK — _BuildArch=%_BuildArch% _NTBINDIR=%_NTBINDIR%
+        set _NTDRIVE=D:
+        set _NTBINDIR=D:\NT
+        set _NTROOT=\
+        set NTMAKEENV=D:\NT\tools
+        set BUILD_PRODUCT=NT
+        set BUILD_DEFAULT_TARGETS=-x86
+        set BUILD_MAKE_PROGRAM=nmake.exe
+        set PROJECT_ROOT=D:\NT\shell
+        set O=obj\i386
+        set FREEBUILD=1
+        set NTDEBUG=ntsd
+        set 386=1
         
-        echo === Building base/ntos (minimal kernel) ===
+        echo === Building base/ntos (minimal 9-module kernel) ===
+        echo dirs:
+        type base\ntos\dirs
+        echo.
         cd base\ntos
         build /cZP
         echo BUILD EXIT: %ERRORLEVEL%
